@@ -1,6 +1,6 @@
-package com.example.docconnetingalarm.infra.rabbitmq.dto;
+package com.example.docconnetingalarmwebflux.infra.rabbitmq.dto;
 
-import com.example.docconnetingalarm.domain.alarm.enums.AlarmType;
+import com.example.docconnetingalarmwebflux.domain.alarm.enums.AlarmType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 

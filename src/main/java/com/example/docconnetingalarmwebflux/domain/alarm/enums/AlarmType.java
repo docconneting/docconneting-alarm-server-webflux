@@ -1,4 +1,4 @@
-package com.example.docconnetingalarm.domain.alarm.enums;
+package com.example.docconnetingalarmwebflux.domain.alarm.enums;
 
 public enum AlarmType {
     COMMENT,

@@ -1,4 +1,4 @@
-package com.example.docconnetingalarm.infra.rabbitmq.dto;
+package com.example.docconnetingalarmwebflux.infra.rabbitmq.dto;
 
 import lombok.Getter;
 

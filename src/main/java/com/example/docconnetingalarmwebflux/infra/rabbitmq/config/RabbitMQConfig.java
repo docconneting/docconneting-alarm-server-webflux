@@ -1,4 +1,4 @@
-package com.example.docconnetingalarm.infra.rabbitmq.config;
+package com.example.docconnetingalarmwebflux.infra.rabbitmq.config;
 
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
