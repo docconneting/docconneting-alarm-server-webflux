@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: docconneting-alarm-webflux
+
+---
+spring:
+  profiles:
+    active: local
