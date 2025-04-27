@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +24,7 @@ public class AlarmService {
     /*
      * 사용자가 유료 게시물을 올렸을 떄 해당 전공에 해당되는 의사들에게 알람 전송
      */
-    public Flux<BatchResponse> sendPostUploadCompletedMessage(Message message) {
+    public Mono<Void> sendPostUploadCompletedMessage(Message message) {
         List<String> fcmTokenList = message.getFcmInfos().stream()
                 .map(FcmInfo::getFcmToken)
                 .toList();
@@ -43,7 +42,8 @@ public class AlarmService {
         }
 
         return Flux.fromIterable(fcmTokenBatches)
-                .flatMap(fcmTokenBatche -> alarmSenderService.sendMulticastAlarm(fcmTokenBatche, alarmMessage));
+                .flatMap(fcmTokenBatche -> alarmSenderService.sendMulticastAlarm(fcmTokenBatche, alarmMessage))
+                .then();
     }
 
     /*
