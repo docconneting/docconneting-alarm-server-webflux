@@ -3,11 +3,17 @@ package com.example.docconnetingalarmwebflux.domain.alarm.service;
 import com.example.docconnetingalarmwebflux.domain.alarm.entity.AlarmHistories;
 import com.example.docconnetingalarmwebflux.domain.alarm.enums.AlarmType;
 import com.example.docconnetingalarmwebflux.domain.alarm.repository.AlarmHistoriesRepository;
+import com.example.docconnetingalarmwebflux.infra.rabbitmq.dto.FcmInfo;
 import com.example.docconnetingalarmwebflux.infra.rabbitmq.dto.Message;
+import com.google.firebase.messaging.BatchResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -15,6 +21,30 @@ public class AlarmService {
 
     private final AlarmHistoriesRepository alarmHistoriesRepository;
     private final AlarmSenderService alarmSenderService;
+
+    /*
+     * 사용자가 유료 게시물을 올렸을 떄 해당 전공에 해당되는 의사들에게 알람 전송
+     */
+    public Flux<BatchResponse> sendPostUploadCompletedMessage(Message message) {
+        List<String> fcmTokenList = message.getFcmInfos().stream()
+                .map(FcmInfo::getFcmToken)
+                .toList();
+
+        List<Long> userIdList = message.getFcmInfos().stream()
+                .map(FcmInfo::getUserId)
+                .toList();
+
+        AlarmType alarmType = message.getAlarmType();
+        String alarmMessage = message.getMessage();
+
+        List<List<String>> fcmTokenBatches = new ArrayList<>();
+        for (int i = 0; i < fcmTokenList.size(); i += 100) {
+            fcmTokenBatches.add(fcmTokenList.subList(i, Math.min(fcmTokenList.size(), i + 100)));
+        }
+
+        return Flux.fromIterable(fcmTokenBatches)
+                .flatMap(fcmTokenBatche -> alarmSenderService.sendMulticastAlarm(fcmTokenBatche, alarmMessage));
+    }
 
     /*
      * 게시물에 의사가 댓글을 달았을 때 게시물 작성자에게 알람 전송
