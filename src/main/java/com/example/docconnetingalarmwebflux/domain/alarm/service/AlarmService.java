@@ -5,7 +5,6 @@ import com.example.docconnetingalarmwebflux.domain.alarm.enums.AlarmType;
 import com.example.docconnetingalarmwebflux.domain.alarm.repository.AlarmHistoriesRepository;
 import com.example.docconnetingalarmwebflux.infra.rabbitmq.dto.FcmInfo;
 import com.example.docconnetingalarmwebflux.infra.rabbitmq.dto.Message;
-import com.google.firebase.messaging.BatchResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -42,7 +41,7 @@ public class AlarmService {
         }
 
         return Flux.fromIterable(fcmTokenBatches)
-                .flatMap(fcmTokenBatche -> alarmSenderService.sendMulticastAlarm(fcmTokenBatche, alarmMessage))
+                .flatMap(fcmTokenBatche -> alarmSenderService.sendMulticastAlarm(fcmTokenBatche, alarmMessage), 5)
                 .then();
     }
 
