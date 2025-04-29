@@ -2,6 +2,7 @@ package com.example.docconnetingalarmwebflux.domain.alarm.service;
 
 import com.example.docconnetingalarmwebflux.domain.alarm.entity.AlarmHistories;
 import com.example.docconnetingalarmwebflux.domain.alarm.enums.AlarmType;
+import com.example.docconnetingalarmwebflux.domain.alarm.repository.AlarmHistoriesBulkRepository;
 import com.example.docconnetingalarmwebflux.domain.alarm.repository.AlarmHistoriesRepository;
 import com.example.docconnetingalarmwebflux.infra.rabbitmq.dto.FcmInfo;
 import com.example.docconnetingalarmwebflux.infra.rabbitmq.dto.Message;
@@ -17,8 +18,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AlarmService {
 
-    private final AlarmHistoriesRepository alarmHistoriesRepository;
     private final AlarmSenderService alarmSenderService;
+    private final AlarmHistoriesRepository alarmHistoriesRepository;
+    private final AlarmHistoriesBulkRepository alarmHistoriesBulkRepository;
 
     /*
      * 사용자가 유료 게시물을 올렸을 떄 해당 전공에 해당되는 의사들에게 알람 전송
@@ -41,7 +43,8 @@ public class AlarmService {
         }
 
         return Flux.fromIterable(fcmTokenBatches)
-                .flatMap(fcmTokenBatche -> alarmSenderService.sendMulticastAlarm(fcmTokenBatche, alarmMessage), 5)
+                .flatMap(fcmTokenBatche -> alarmSenderService.sendMulticastAlarm(fcmTokenBatche, alarmMessage), 4)
+                .then(alarmHistoriesBulkRepository.saveBatch(userIdList, alarmType, alarmMessage))
                 .then();
     }
 
