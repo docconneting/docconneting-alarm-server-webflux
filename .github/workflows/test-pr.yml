@@ -1,11 +1,8 @@
 name: Test Every PR
 
 on:
-  push:
-    branches:
-      - feat/cicd  # 필요 시 main 등으로 수정 가능
-  pull_request:
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read
@@ -30,35 +27,63 @@ jobs:
           --health-retries=5
 
     steps:
-      # 1. 코드 체크아웃
+      # 1. Checkout code
       - name: Checkout
         uses: actions/checkout@v3
 
-      # 2. JDK 17 설치
-      - name: Set up JDK
+      # 2. Set up JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
           cache: gradle
 
-      # 3. gradlew 실행 권한 부여
+      # 3. Gradle 실행 권한 부여
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # 4. MySQL 준비 시간 확보
+      # 4. 테스트 리소스 디렉토리 생성
+      - name: Create test resource directories
+        run: mkdir -p src/test/resources/firebase
+
+      # 5. application-test.yml 생성
+      - name: Write application-test.yml from secret
+        run: echo "${{ secrets.APPLICATION_TEST_YML_CONTENT }}" | base64 -d > src/test/resources/application-test.yml
+
+      # 6. Firebase 인증 JSON 파일 생성
+      - name: Write Firebase cert JSON
+        run: echo "${{ secrets.FCM_CERT_JSON_CONTENT }}" | base64 -d > src/test/resources/firebase/test-firebase-adminsdk.json
+
+      # 7. 디버깅용: application-test.yml 확인
+      - name: Debug application-test.yml content
+        run: |
+          echo "===== application-test.yml ====="
+          cat src/test/resources/application-test.yml
+          echo "================================"
+
+      # 8. 디버깅용: Firebase 파일 존재 확인
+      - name: Check Firebase file exists
+        run: |
+          if [ -f src/test/resources/firebase/test-firebase-adminsdk.json ]; then
+            echo "✅ Firebase JSON exists"
+          else
+            echo "❌ Firebase JSON missing"
+            exit 1
+          fi
+
+      # 9. Wait for MySQL
       - name: Wait for MySQL to be ready
         run: sleep 20
 
-      # 5. MySQL 접속 및 테이블 확인 (디버깅용)
-      - name: Check MySQL connection
+      # 10. MySQL 접속 및 테이블 확인
+      - name: Check MySQL connectivity
         run: |
           sudo apt-get update && sudo apt-get install -y mysql-client
           mysql -h 127.0.0.1 -P 3306 -u root -p0000 -e "SHOW DATABASES;"
-          mysql -h 127.0.0.1 -P 3306 -u root -p0000 -e "SHOW TABLES FROM docconneting_test;"
 
-      # 6. 테스트 실행 (test 프로파일 활성화)
-      - name: Run Tests with `test` profile
+      # 11. Run tests with profile
+      - name: Run Tests
         run: ./gradlew test
         env:
           SPRING_PROFILES_ACTIVE: test
