@@ -47,6 +47,10 @@ out/
 *-prod.yml
 *-prod.properties
 
+### test properties ###
+*-test.yml
+*-test.properties
+
 ### Firebase secret key ###
 *.json
 
