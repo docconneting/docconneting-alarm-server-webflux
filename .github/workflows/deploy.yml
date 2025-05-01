@@ -1,0 +1,134 @@
+name: Deploy Alarm Service
+
+on:
+  push:
+    branches:
+      - feat/cicd
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: alarm-service
+  IMAGE_TAG: latest
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. GitHub 코드 가져오기
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Java 17 설치
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. Gradle로 bootJar 빌드
+      - name: Build with Gradle
+        run: ./gradlew clean bootJar -x test
+
+      # 4. AWS 자격증명 설정
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 5. ECR 로그인
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 6. Docker 이미지 빌드 및 ECR 푸시
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+      # 7. SSH 설정 및 설정파일 준비
+      - name: Prepare SSH and Config Files
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOCCONNETING_SSH_KEY }}" | base64 --decode > ~/.ssh/docconneting.pem
+          chmod 600 ~/.ssh/docconneting.pem
+
+          cat <<EOF > ~/.ssh/config
+          Host bastion
+            HostName ${{ secrets.BASTION_HOST }}
+            User ubuntu
+            IdentityFile ~/.ssh/docconneting.pem
+            StrictHostKeyChecking no
+
+          Host alarm
+            HostName ${{ secrets.ALARM_PRIVATE_IP }}
+            User ubuntu
+            IdentityFile ~/.ssh/docconneting.pem
+            ProxyJump bastion
+            StrictHostKeyChecking no
+          EOF
+
+          # Firebase 인증 파일 복원
+          mkdir -p firebase
+          echo "${{ secrets.FIREBASE_CERT_BASE64 }}" | base64 --decode > firebase/docconneting-firebase-adminsdk-fbsvc-017c34b883.json
+
+          # application-prod.yml 생성
+          cat <<EOF > application-prod.yml
+          $(cat application-prod.yml)
+          EOF
+
+          # docker-compose.yml 생성
+          cat <<EOF > docker-compose.yml
+          services:
+            alarm:
+              image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+              container_name: alarm
+              restart: always
+              ports:
+                - "9003:9003"
+              volumes:
+                - ./application-prod.yml:/app/config/application-prod.yml
+                - ./firebase:/app/firebase
+              environment:
+                - SPRING_PROFILES_ACTIVE=prod
+          EOF
+
+      # 8. EC2에 배포
+      - name: Deploy to Alarm EC2
+        run: |
+          scp -o StrictHostKeyChecking=no -r docker-compose.yml application-prod.yml firebase alarm:/home/ubuntu/server/
+
+          ssh alarm <<EOF
+            cd ~/server
+
+            # Docker 설치
+            if ! command -v docker &> /dev/null; then
+              sudo apt update
+              sudo apt install -y docker.io
+              sudo systemctl enable docker
+              sudo systemctl start docker
+              sudo usermod -aG docker ubuntu
+            fi
+
+            # Docker Compose 설치
+            if ! docker compose version &> /dev/null; then
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              sudo curl -SL https://github.com/docker/compose/releases/download/v2.24.2/docker-compose-linux-x86_64 \
+                -o /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+            fi
+
+            # ECR 로그인
+            aws ecr get-login-password --region ap-northeast-2 | \
+              sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+
+            # 기존 컨테이너 제거 및 재실행
+            sudo docker compose down --remove-orphans
+            sudo docker compose pull
+            sudo docker system prune -af
+            sudo docker compose up -d
+          EOF
