@@ -3,7 +3,8 @@ name: Test Every PR
 on:
   push:
     branches:
-      - feat/cicd
+      - feat/cicd  # 필요 시 main 등으로 수정 가능
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -45,30 +46,18 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
-      # 4. 테스트용 리소스 디렉토리 생성
-      - name: Create test resource dir
-        run: mkdir -p src/test/resources/firebase
-
-      # 5. 테스트용 application-test.yml 파일 생성
-      - name: Write application-test.yml in test resources
-        run: echo "${{ secrets.APPLICATION_TEST_YML_CONTENT }}" | base64 -d > src/test/resources/application-test.yml
-
-      # 6. 테스트용 Firebase 인증 파일 생성
-      - name: Write test Firebase JSON
-        run: echo "${{ secrets.FCM_CERT_JSON_CONTENT }}" | base64 -d > src/test/resources/firebase/test-firebase-adminsdk.json
-
-      # 7. MySQL 준비 시간 확보
+      # 4. MySQL 준비 시간 확보
       - name: Wait for MySQL to be ready
         run: sleep 20
 
-      # 8. MySQL 접속 및 테이블 확인
-      - name: MySQL connection & table check
+      # 5. MySQL 접속 및 테이블 확인 (디버깅용)
+      - name: Check MySQL connection
         run: |
           sudo apt-get update && sudo apt-get install -y mysql-client
           mysql -h 127.0.0.1 -P 3306 -u root -p0000 -e "SHOW DATABASES;"
           mysql -h 127.0.0.1 -P 3306 -u root -p0000 -e "SHOW TABLES FROM docconneting_test;"
 
-      # 9. 테스트 실행 (test 프로파일 활성화)
+      # 6. 테스트 실행 (test 프로파일 활성화)
       - name: Run Tests with `test` profile
         run: ./gradlew test
         env:
