@@ -1,18 +1,14 @@
 name: Deploy Alarm Service
 
 on:
-  push:
+  pull_request:
+    types: [ closed ]
     branches:
-      - feat/cicd
-  workflow_dispatch:
-
-env:
-  AWS_REGION: ap-northeast-2
-  ECR_REPOSITORY: alarm-service
-  IMAGE_TAG: latest
+      - dev
 
 jobs:
   deploy:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
