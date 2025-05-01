@@ -13,6 +13,13 @@ java {
     }
 }
 
+sourceSets {
+    test {
+        resources {
+            srcDir 'src/test/resources'
+        }
+    }
+}
 configurations {
     compileOnly {
         extendsFrom annotationProcessor
