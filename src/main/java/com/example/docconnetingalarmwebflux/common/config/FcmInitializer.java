@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -21,9 +22,7 @@ public class FcmInitializer {
 
     @PostConstruct
     public void initialize() throws IOException {
-        ClassPathResource resource = new ClassPathResource(googleApplicationCredentials);
-
-        try (InputStream is = resource.getInputStream()) {
+        try (InputStream is = new FileInputStream(googleApplicationCredentials)) {
             FirebaseOptions options = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(is))
                     .build();
@@ -34,4 +33,5 @@ public class FcmInitializer {
             }
         }
     }
+
 }
