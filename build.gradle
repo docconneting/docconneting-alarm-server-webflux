@@ -71,3 +71,9 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+//중복 생성 방지
+tasks.withType(ProcessResources).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
