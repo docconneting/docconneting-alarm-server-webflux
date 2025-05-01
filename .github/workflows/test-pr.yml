@@ -55,7 +55,7 @@ jobs:
 
       # 6. Firebase 인증 JSON 파일 생성
       - name: Write Firebase cert JSON
-        run: echo "${{ secrets.FCM_CERT_JSON_CONTENT }}" | base64 -d > src/test/resources/firebase/test-firebase-adminsdk.json
+        run: echo "${{ secrets.FIREBASE_BASE64 }}" | base64 -d > src/test/resources/firebase/test-firebase-adminsdk.json
 
       # 7. 디버깅용: application-test.yml 확인
       - name: Debug application-test.yml content
