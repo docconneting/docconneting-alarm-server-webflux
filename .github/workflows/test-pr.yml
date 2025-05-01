@@ -1,8 +1,10 @@
 name: Test Every PR
 
 on:
+  push:
+    branches:
+      - feat/cicd
   workflow_dispatch:
-  pull_request:
 
 permissions:
   contents: read
