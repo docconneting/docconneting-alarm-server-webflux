@@ -16,119 +16,91 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. GitHub 코드 가져오기
+      # 1. 코드 체크아웃
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Java 17 설치
+      # 2. JDK 설정
       - name: Set up JDK
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. Gradle로 bootJar 빌드
-      - name: Build with Gradle
+      # 3. gradlew 실행 권한
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # 4. application-prod.yml & firebase 생성
+      - name: Restore application-prod.yml & firebase
+        run: |
+          mkdir -p src/main/resources/firebase
+          echo "${{ secrets.FIREBASE_BASE64 }}" | base64 -d > src/main/resources/firebase/docconneting-firebase-adminsdk-fbsvc-017c34b883.json
+          echo "${{ secrets.APPLICATION_PROD_YML_CONTENT }}" | base64 -d > src/main/resources/application-prod.yml
+
+      # 5. bootJar 빌드
+      - name: Build bootJar
         run: ./gradlew clean bootJar -x test
 
-      # 4. AWS 자격증명 설정
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v3
+      # 6. AWS 자격 증명 설정
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ env.AWS_REGION }}
 
-      # 5. ECR 로그인
+      # 7. ECR 로그인
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 6. Docker 이미지 빌드 및 ECR 푸시
-      - name: Build and Push Docker Image
+      # 8. Docker 이미지 빌드 및 푸시
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          docker build -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
-          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
+          docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
 
-      # 7. SSH 설정 및 설정파일 준비
-      - name: Prepare SSH and Config Files
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DOCCONNETING_SSH_KEY }}" | base64 --decode > ~/.ssh/docconneting.pem
-          chmod 600 ~/.ssh/docconneting.pem
+      # 9. EC2 SSH 연결 및 배포
+      - name: Set up SSH Agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-          cat <<EOF > ~/.ssh/config
-          Host bastion
-            HostName ${{ secrets.BASTION_HOST }}
-            User ubuntu
-            IdentityFile ~/.ssh/docconneting.pem
-            StrictHostKeyChecking no
-
-          Host alarm
-            HostName ${{ secrets.ALARM_PRIVATE_IP }}
-            User ubuntu
-            IdentityFile ~/.ssh/docconneting.pem
-            ProxyJump bastion
-            StrictHostKeyChecking no
-          EOF
-
-          # Firebase 인증 파일 복원
-          mkdir -p firebase
-          echo "${{ secrets.FIREBASE_CERT_BASE64 }}" | base64 --decode > firebase/docconneting-firebase-adminsdk-fbsvc-017c34b883.json
-
-          # application-prod.yml 생성
-          cat <<EOF > application-prod.yml
-          $(cat application-prod.yml)
-          EOF
-
-          # docker-compose.yml 생성
-          cat <<EOF > docker-compose.yml
-          services:
-            alarm:
-              image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
-              container_name: alarm
-              restart: always
-              ports:
-                - "9003:9003"
-              volumes:
-                - ./application-prod.yml:/app/config/application-prod.yml
-                - ./firebase:/app/firebase
-              environment:
-                - SPRING_PROFILES_ACTIVE=prod
-          EOF
-
-      # 8. EC2에 배포
       - name: Deploy to Alarm EC2
-        run: |
-          scp -o StrictHostKeyChecking=no -r docker-compose.yml application-prod.yml firebase alarm:/home/ubuntu/server/
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.ALARM_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p ~/alarm-server && cd ~/alarm-server
 
-          ssh alarm <<EOF
-            cd ~/server
+            echo "${{ secrets.APPLICATION_PROD_YML_CONTENT }}" | base64 -d > application-prod.yml
+            mkdir -p firebase
+            echo "${{ secrets.FIREBASE_BASE64 }}" | base64 -d > firebase/docconneting-firebase-adminsdk-fbsvc-017c34b883.json
 
-            # Docker 설치
-            if ! command -v docker &> /dev/null; then
-              sudo apt update
-              sudo apt install -y docker.io
-              sudo systemctl enable docker
-              sudo systemctl start docker
-              sudo usermod -aG docker ubuntu
-            fi
+            cat <<EOF > docker-compose.yml
+            services:
+              alarm:
+                image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+                container_name: alarm
+                restart: always
+                ports:
+                  - "9003:9003"
+                volumes:
+                  - ./application-prod.yml:/app/config/application-prod.yml
+                  - ./firebase:/app/firebase
+                environment:
+                  - SPRING_PROFILES_ACTIVE=prod
+            EOF
 
-            # Docker Compose 설치
-            if ! docker compose version &> /dev/null; then
-              sudo mkdir -p /usr/local/lib/docker/cli-plugins
-              sudo curl -SL https://github.com/docker/compose/releases/download/v2.24.2/docker-compose-linux-x86_64 \
-                -o /usr/local/lib/docker/cli-plugins/docker-compose
-              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-            fi
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+              docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
 
-            # ECR 로그인
-            aws ecr get-login-password --region ap-northeast-2 | \
-              sudo docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
-
-            # 기존 컨테이너 제거 및 재실행
-            sudo docker compose down --remove-orphans
-            sudo docker compose pull
-            sudo docker system prune -af
-            sudo docker compose up -d
-          EOF
+            docker compose down --remove-orphans
+            docker compose pull
+            docker system prune -af
+            docker compose up -d
