@@ -53,17 +53,19 @@ jobs:
           docker build -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
           docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
 
-      - name: Set up SSH Agent
-        uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.DOCCONNETING_SSH_KEY }}
+      - name: Decode SSH key and start ssh-agent
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOCCONNETING_SSH_KEY }}" | base64 -d > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_rsa
 
       - name: Deploy to Alarm EC2
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.ALARM_EC2_HOST }}
           username: ubuntu
-          key: ${{ secrets.DOCCONNETING_SSH_KEY }}
           script: |
             mkdir -p ~/alarm-server && cd ~/alarm-server
 
@@ -71,10 +73,12 @@ jobs:
             mkdir -p firebase
             echo "${{ secrets.FIREBASE_BASE64 }}" | base64 -d > firebase/docconneting-firebase-adminsdk-fbsvc-017c34b883.json
 
+            ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+
             cat <<EOF > docker-compose.yml
             services:
               alarm:
-                image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+                image: $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
                 container_name: alarm
                 restart: always
                 ports:
@@ -104,7 +108,7 @@ jobs:
 
             # ECR 로그인
             aws ecr get-login-password --region ap-northeast-2 | \
-              docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+              docker login --username AWS --password-stdin $ECR_REGISTRY
 
             # 배포
             docker compose down --remove-orphans
