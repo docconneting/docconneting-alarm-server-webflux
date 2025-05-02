@@ -1,10 +1,11 @@
 name: Deploy Alarm Service
 
 on:
-  push:
+  pull_request:
+    types: [ closed ]
     branches:
-      - feat/cicd  # 이 브랜치에 push될 때마다 작동
-  workflow_dispatch:  # 수동 실행도 가능하게
+      - dev
+
 
 env:
   ECR_REPOSITORY: alarm-service
@@ -12,6 +13,7 @@ env:
 
 jobs:
   deploy:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
