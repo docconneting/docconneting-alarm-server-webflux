@@ -6,6 +6,10 @@ on:
     branches:
       - dev
 
+env:
+  ECR_REPOSITORY: alarm-service
+  IMAGE_TAG: latest
+  
 jobs:
   deploy:
     if: github.event.pull_request.merged == true
