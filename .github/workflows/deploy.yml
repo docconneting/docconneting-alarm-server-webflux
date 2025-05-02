@@ -6,10 +6,11 @@ on:
     branches:
       - dev
 
+
 env:
   ECR_REPOSITORY: alarm-service
   IMAGE_TAG: latest
-   
+
 jobs:
   deploy:
     if: github.event.pull_request.merged == true
@@ -84,6 +85,7 @@ jobs:
                 - ./firebase:/app/firebase
               environment:
                 - SPRING_PROFILES_ACTIVE=prod
+                - SPRING_RABBITMQ_ADDRESSES=10.0.1.186
           EOF
 
       - name: Deploy to Alarm EC2 via Bastion
