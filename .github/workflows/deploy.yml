@@ -6,7 +6,7 @@ on:
     branches:
       - dev
 
-
+ 
 env:
   ECR_REPOSITORY: alarm-service
   IMAGE_TAG: latest
