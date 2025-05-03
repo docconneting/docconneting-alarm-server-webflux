@@ -90,7 +90,7 @@ jobs:
                 - ./firebase:/app/firebase
               environment:
                 - SPRING_PROFILES_ACTIVE=prod
-                - SPRING_RABBITMQ_ADDRESSES=${{SPRING_RABBITMQ_ADDRESSES}}
+                - SPRING_RABBITMQ_ADDRESSES=${{ secrets.RABBITMQ_HOST }}
           EOF
 
       - name: Deploy to Alarm EC2 via Bastion
